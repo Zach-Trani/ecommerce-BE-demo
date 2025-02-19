@@ -9,7 +9,7 @@ import java.util.Objects;
 
 @Entity
 @Table
-public class Employee {
+public class Product {
 
     @Id
     @GeneratedValue
@@ -20,11 +20,11 @@ public class Employee {
     private long salary;
 
     // No-args constructor (required by JPA)
-    public Employee() {
+    public Product() {
     }
 
     // All-args constructor
-    public Employee(int id, String name, String dept, long salary) {
+    public Product(int id, String name, String dept, long salary) {
         this.id = id;
         this.name = name;
         this.dept = dept;
@@ -68,12 +68,12 @@ public class Employee {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof Employee)) return false;
-        Employee employee = (Employee) o;
-        return id == employee.id &&
-                salary == employee.salary &&
-                Objects.equals(name, employee.name) &&
-                Objects.equals(dept, employee.dept);
+        if (!(o instanceof Product)) return false;
+        Product product = (Product) o;
+        return id == product.id &&
+                salary == product.salary &&
+                Objects.equals(name, product.name) &&
+                Objects.equals(dept, product.dept);
     }
 
     @Override
@@ -84,7 +84,7 @@ public class Employee {
     // toString()
     @Override
     public String toString() {
-        return "Employee{" +
+        return "Product{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", dept='" + dept + '\'' +

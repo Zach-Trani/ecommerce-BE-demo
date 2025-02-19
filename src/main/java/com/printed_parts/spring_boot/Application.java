@@ -13,15 +13,15 @@ public class Application {
 
 	// injects the repo into the controller
 	@Autowired
-	private EmployeeRepository repository;
+	private ProductRepository repository;
 
-	@PostMapping("/employee")
-	public Employee addEmployee(@RequestBody Employee employee){
-		return repository.save(employee);
+	@PostMapping("/product")
+	public Product addProduct(@RequestBody Product product){
+		return repository.save(product);
 	}
 
-	@GetMapping("/employees")
-	public List<Employee> getEmployees(){
+	@GetMapping("/products")
+	public List<Product> getProducts(){
 		return repository.findAll();
 	}
 
