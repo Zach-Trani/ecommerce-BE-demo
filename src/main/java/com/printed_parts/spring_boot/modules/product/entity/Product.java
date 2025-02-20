@@ -1,4 +1,4 @@
-package com.printed_parts.spring_boot;
+package com.printed_parts.spring_boot.modules.product.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
