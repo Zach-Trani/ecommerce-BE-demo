@@ -1,34 +1,48 @@
 package com.printed_parts.spring_boot.modules.product.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
+import jakarta.persistence.*;
 import java.util.Objects;
+import java.math.BigDecimal;
 
 @Entity
-@Table
+@Table(name = "PRODUCT")
 public class Product {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    private String name;
-    private String dept;
-    private long salary;
+    @Column(name = "img_url")
+    private String imgUrl;
+
+    @Column(name = "description_short")
+    private String descriptionShort;
+
+    @Column(name = "description_long")
+    private String descriptionLong;
+
+    @Column(name = "price")
+    private BigDecimal price;
+
+    @Column(name = "material")
+    private String material;
+
+    @Column(name = "size")
+    private String size;
 
     // No-args constructor (required by JPA)
     public Product() {
     }
 
     // All-args constructor
-    public Product(int id, String name, String dept, long salary) {
+    public Product(int id, String imgUrl, String descriptionShort, String descriptionLong, BigDecimal price, String material, String size) {
         this.id = id;
-        this.name = name;
-        this.dept = dept;
-        this.salary = salary;
+        this.imgUrl = imgUrl;
+        this.descriptionShort = descriptionShort;
+        this.descriptionLong = descriptionLong;
+        this.price = price;
+        this.material = material;
+        this.size = size;
     }
 
     // Getters and setters
@@ -40,28 +54,52 @@ public class Product {
         this.id = id;
     }
 
-    public String getName() {
-        return name;
+    public String getImgUrl() {
+        return imgUrl;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void setImgUrl(String imgUrl) {
+        this.imgUrl = imgUrl;
     }
 
-    public String getDept() {
-        return dept;
+    public String getDescriptionShort() {
+        return descriptionShort;
     }
 
-    public void setDept(String dept) {
-        this.dept = dept;
+    public void setDescriptionShort(String descriptionShort) {
+        this.descriptionShort = descriptionShort;
     }
 
-    public long getSalary() {
-        return salary;
+    public String getDescriptionLong() {
+        return descriptionLong;
     }
 
-    public void setSalary(long salary) {
-        this.salary = salary;
+    public void setDescriptionLong(String descriptionLong) {
+        this.descriptionLong = descriptionLong;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+
+    public String getMaterial() {
+        return material;
+    }
+
+    public void setMaterial(String material) {
+        this.material = material;
+    }
+
+    public String getSize() {
+        return size;
+    }
+
+    public void setSize(String size) {
+        this.size = size;
     }
 
     // equals() and hashCode()
@@ -71,14 +109,17 @@ public class Product {
         if (!(o instanceof Product)) return false;
         Product product = (Product) o;
         return id == product.id &&
-                salary == product.salary &&
-                Objects.equals(name, product.name) &&
-                Objects.equals(dept, product.dept);
+                Objects.equals(imgUrl, product.imgUrl) &&
+                Objects.equals(descriptionShort, product.descriptionShort) &&
+                Objects.equals(descriptionLong, product.descriptionLong) &&
+                Objects.equals(price, product.price) &&
+                Objects.equals(material, product.material) &&
+                Objects.equals(size, product.size);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, name, dept, salary);
+        return Objects.hash(id, imgUrl, descriptionShort, descriptionLong, price, material, size);
     }
 
     // toString()
@@ -86,9 +127,12 @@ public class Product {
     public String toString() {
         return "Product{" +
                 "id=" + id +
-                ", name='" + name + '\'' +
-                ", dept='" + dept + '\'' +
-                ", salary=" + salary +
+                ", imgUrl='" + imgUrl + '\'' +
+                ", descriptionShort='" + descriptionShort + '\'' +
+                ", descriptionLong='" + descriptionLong + '\'' +
+                ", price=" + price +
+                ", material='" + material + '\'' +
+                ", size='" + size + '\'' +
                 '}';
     }
 }

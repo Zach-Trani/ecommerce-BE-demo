@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 import com.printed_parts.spring_boot.modules.product.entity.Product;
 import com.printed_parts.spring_boot.modules.product.repository.ProductRepository;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class ProductController {
