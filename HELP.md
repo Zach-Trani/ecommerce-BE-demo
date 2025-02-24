@@ -1,7 +1,4 @@
 # Read Me First
-The following was discovered as part of building this project:
-
-* The original package name 'com.printed-parts.spring-boot' is invalid and this project uses 'com.printed_parts.spring_boot' instead.
 
 # Getting Started
 
