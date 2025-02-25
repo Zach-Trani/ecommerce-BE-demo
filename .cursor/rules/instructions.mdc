@@ -1,9 +1,24 @@
 ---
-description:
-globs:
+description: 
+globs: 
 ---
 
 # Your rule content
 
 - You can @ files here
 - You can use markdown but dont have to
+
+
+# Review the Project Changelog and Project Directory notes below for our Ecommerce App's Spring Boot Back End. This back end interacts with a React Typescript Front End.
+
+## Project Changelog
+
+v1.1 - created the bootstrap card in ProductList.tsx to display ecommerce data such as images, product names, prices
+v1.2 - created the page mount get request in ProductList.tsx to get all of our data from the azure database at the "/products" endpoint
+v1.3 - created global state with usecontext to allow users to select one of the products and open a new page that is ProductPage.tsx
+v1.4 - created the aethetics but not yet functional add to cart button that opens the bootstrap offcanvas in ProductPage.tsx
+v1.5 - progress towards implementing a checkout button that makes a post request to our backend stripe checkout service by sending a product name, quantity, and amount to the "product/v1/checkout" endpoint
+
+v1.1 - developed and deployed the spring boot back end and Azure SQL database
+v1.2 - created the first module in the module based architecture, the product module, featuring a Product controller, entity, and repository
+v1.3 - created POST and GET requests in Product controller for our Product entity

@@ -30,4 +30,3 @@ build/
 .vscode/
 target/
 build-and-push.sh
-.cursor/
