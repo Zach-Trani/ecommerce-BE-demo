@@ -47,8 +47,8 @@ public class StripeService {
         // Create new session with the line items
         SessionCreateParams params = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.PAYMENT)
-                .setSuccessUrl("http://localhost:9191/success")
-                .setCancelUrl("http://localhost:9191/cancel")
+                .setSuccessUrl("https://lively-moss-09bc30c10.4.azurestaticapps.net/success")
+                .setCancelUrl("https://lively-moss-09bc30c10.4.azurestaticapps.net/cancel")
                 .addLineItem(lineItem)
                 .build();
 

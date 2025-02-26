@@ -4,12 +4,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 // import org.springframework.context.annotation.Profile;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.core.io.Resource;
+import org.springframework.web.servlet.resource.PathResourceResolver;
+import java.io.IOException;
 
 // In addition to the below CORS settings - Azure has App Service level CORS settings for the backend deployment
 @Configuration
 // @Profile("dev") // Remove this line to make CORS config active in all profiles
-public class WebConfig {
+public class WebConfig implements WebMvcConfigurer {
     @Bean
     public WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
@@ -27,5 +31,26 @@ public class WebConfig {
                         .maxAge(3600);
             }
         };
+    }
+
+    // We can handle backend routes that exist in Spring Boot (@GetMapping's or @PostMapping's) through controllers.
+    // Client → Spring Boot (processes request) → Returns JSON/data
+
+    // But, we have additional client side routing (UI pages) that don't have actual endpoints in Spring Boot ("/success" or "/cancel").
+    // addResourceHandlers tells Spring Boot to let your client side router (currently React Router) handle routes that are not found.
+    // Client → Spring Boot (no endpoint found) → Serves index.html → React Router takes over
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/**") // handle all requests
+            .addResourceLocations("classpath:/static/") // look for static files first
+            .resourceChain(true)
+            .addResolver(new PathResourceResolver() {
+                @Override
+                protected Resource getResource(String resourcePath, Resource location) throws IOException {
+                    Resource requestedResource = location.createRelative(resourcePath);
+                    return requestedResource.exists() && requestedResource.isReadable() ? requestedResource
+                        : location.createRelative("index.html");
+                }
+            });
     }
 }

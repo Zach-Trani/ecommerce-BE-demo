@@ -1,0 +1,17 @@
+---
+description: Guidelines for Project
+globs: *.java, *.properties, *.yml
+---
+
+# Review the Project Changelog and Project Directory notes below for our Ecommerce App's Spring Boot Back End. This back end interacts with a React Typescript Front End.
+
+## Project Changelog
+
+
+v1.1 - developed and deployed the spring boot back end and Azure SQL database
+v1.2 - created the first module in the module based architecture, the product module, featuring a Product controller, entity, and repository
+v1.3 - created POST and GET requests at endpoints "/product" and "/products" in Product controller for our Product entity
+v1.4 - created a second module for single product stripe payment processing that holds a Stripe Product checkout controller and a new endpoint for POST requests at "/checkout"
+v1.5 - created DTO files to build the Product request and the Stripe response
+v1.6 - created a Stripe service file to handle Stripe configration and routing redirection after paymen
+v.17 - created addResourceHandlers method in WebConfig.java to integrate client side routing with Spring Boot
