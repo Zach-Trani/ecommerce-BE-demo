@@ -1,20 +1,14 @@
 package com.printed_parts.spring_boot.modules.stripe.controller;
 
+import com.printed_parts.spring_boot.modules.stripe.dto.CartRequest;
 import com.printed_parts.spring_boot.modules.stripe.dto.ProductRequest;
 import com.printed_parts.spring_boot.modules.stripe.dto.StripeResponse;
 import com.printed_parts.spring_boot.modules.stripe.service.StripeService;
-// import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/product/v1")
-// @CrossOrigin(
-// origins = "http://localhost:5173",
-// allowedHeaders = "*",
-// methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS},
-// allowCredentials = "true"
-// )
 public class ProductCheckoutController {
 
     private StripeService stripeService;
@@ -23,24 +17,23 @@ public class ProductCheckoutController {
         this.stripeService = stripeService;
     }
 
+    /**
+     * Legacy endpoint for single product checkout
+     * Maintains backward compatibility
+     */
     @PostMapping("/checkout")
     public ResponseEntity<StripeResponse> checkoutProducts(@RequestBody ProductRequest productRequest) {
         StripeResponse response = stripeService.checkoutProducts(productRequest);
-        return ResponseEntity.ok()
-                .header("Access-Control-Allow-Origin", "https://lively-moss-09bc30c10.4.azurestaticapps.net")
-                .header("Access-Control-Allow-Credentials", "true")
-                .header("Vary", "Origin")
-                .body(response);
+        return ResponseEntity.ok(response);
     }
-
-    @RequestMapping(value = "/checkout", method = RequestMethod.OPTIONS)
-    public ResponseEntity<Void> handleOptions() {
-        return ResponseEntity.ok()
-                .header("Access-Control-Allow-Origin", "https://lively-moss-09bc30c10.4.azurestaticapps.net")
-                .header("Access-Control-Allow-Methods", "POST, OPTIONS")
-                .header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-                .header("Access-Control-Allow-Credentials", "true")
-                .header("Vary", "Origin")
-                .build();
+    
+    /**
+     * New endpoint for cart checkout
+     * Handles multiple products
+     */
+    @PostMapping("/cart/checkout")
+    public ResponseEntity<StripeResponse> checkoutCart(@RequestBody CartRequest cartRequest) {
+        StripeResponse response = stripeService.checkout(cartRequest);
+        return ResponseEntity.ok(response);
     }
 }
