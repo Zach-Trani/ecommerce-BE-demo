@@ -1,8 +1,6 @@
 # Modular Backend Structure Example:
 
-To Deploy: 
-* make sure application.yml profile is not set to dev
-* toggle off local CORS config
+To Deploy:
 * run build-and-push.sh
 * restart backend azure app service
 

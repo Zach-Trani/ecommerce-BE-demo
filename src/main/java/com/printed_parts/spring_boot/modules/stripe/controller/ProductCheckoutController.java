@@ -18,7 +18,7 @@ public class ProductCheckoutController {
     }
 
     /**
-     * Legacy endpoint for single product checkout
+     * Legacy endpoint for single product checkout - TO BE PHASED OUT
      * Maintains backward compatibility
      */
     @PostMapping("/checkout")

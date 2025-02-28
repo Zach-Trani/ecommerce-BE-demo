@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+// ProductItem class is a filtered Product class and contains only the relevant information for Stripe
 @Data
 public class ProductItem {
     private Long amount;  // Price in cents
