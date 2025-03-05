@@ -18,6 +18,7 @@ public class ProductController {
 	@Autowired
 	private ProductRepository repository;
 
+	// not currently being used - no add product form in the front end
 	@PostMapping("/product")
 	public Product addProduct(@RequestBody Product product){
 		return repository.save(product);

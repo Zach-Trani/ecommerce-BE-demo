@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+// similar to our product entity, contains fewer properties only relevant to Stripe
 @Data
 public class ProductItem {
     private Long amount;  // Price in cents

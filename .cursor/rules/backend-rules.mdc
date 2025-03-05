@@ -1,17 +1,85 @@
 ---
-description: Guidelines for Project
+description: Guidelines for Projectr 
 globs: *.java, *.properties, *.yml
+alwaysApply: false
 ---
 
 # Review the Project Changelog and Project Directory notes below for our Ecommerce App's Spring Boot Back End. This back end interacts with a React Typescript Front End.
 
 ## Project Changelog
 
+# Project Changelog
 
-v1.1 - developed and deployed the spring boot back end and Azure SQL database
-v1.2 - created the first module in the module based architecture, the product module, featuring a Product controller, entity, and repository
-v1.3 - created POST and GET requests at endpoints "/product" and "/products" in Product controller for our Product entity
-v1.4 - created a second module for single product stripe payment processing that holds a Stripe Product checkout controller and a new endpoint for POST requests at "/checkout"
-v1.5 - created DTO files to build the Product request and the Stripe response
-v1.6 - created a Stripe service file to handle Stripe configration and routing redirection after paymen
-v.17 - created addResourceHandlers method in WebConfig.java to integrate client side routing with Spring Boot
+## Initial Setup and Core Infrastructure
+v1.1
+- Developed and deployed Spring Boot backend application
+- Set up Azure SQL database for product storage
+- Configured basic project structure and dependencies
+
+## Module 1: Product Management
+v1.2 - Product Module Implementation
+- Established module-based architecture
+- Created Product module with core components:
+  - `Product.java`: Entity class for database mapping
+    - Fields: id, imgUrl, descriptions, price, material, size
+    - JPA annotations for database mapping
+  - `ProductController.java`: REST endpoints for product operations
+  - `ProductRepository.java`: JPA repository for database operations
+
+v1.3 - Product API Endpoints
+- Implemented REST endpoints in ProductController:
+  - GET `/products`: Retrieve all products from database
+  - POST `/product`: Add new product (currently unused)
+- Added database query functionality through JPA repository
+
+## Module 2: Stripe Payment Integration
+v1.4 - Single Product Checkout
+- Created Stripe payment processing module
+- Implemented `ProductCheckoutController.java` with endpoints:
+  - POST `/checkout`: Process single product payments
+  - Configured basic Stripe API integration
+
+v1.5 - Data Transfer Objects (DTOs)
+- Created DTO classes for payment processing:
+  - `ProductRequest.java`: Single product checkout data
+    - Fields: amount, quantity, name, currency (Our legacy approach to checkout with only one product)
+  - `ProductItem.java`: Simplified product data for Stripe
+    - Fields: amount (in cents), quantity, name (New approach, represents individual items in a cart)
+  - `CartRequest.java`: Shopping cart data structure (New approach, is a list of ProductItem objects)
+    - Fields: List<ProductItem>, currency
+  - `StripeResponse.java`: Stripe API response wrapper
+    - Fields: status, message, sessionId, sessionUrl
+
+v1.6 - Stripe Service Implementation
+- Created `StripeService.java` to handle payment processing:
+  - Implemented Stripe API configuration
+  - Added checkout session creation
+  - Configured success/cancel URL redirections
+  - Added support for both single and multiple product checkout
+
+v1.7 - Frontend Integration
+- Enhanced `WebConfig.java` with:
+  - Added `addResourceHandlers` method for client-side routing
+  - Configured CORS for frontend-backend communication
+  - Implemented path resolution for React Router integration
+
+## Current Features
+- Product database management with Azure SQL
+- Stripe payment processing for single products
+- Shopping cart checkout functionality
+- Frontend-backend integration with CORS support
+- Client-side routing support
+
+## Data Flow Architecture
+1. Frontend sends checkout request with product data
+2. ProductCheckoutController receives request
+3. StripeService processes payment details
+4. Stripe API creates checkout session
+5. User redirected to Stripe checkout page
+6. Success/Cancel URLs handle payment result
+
+## API Endpoints
+- GET `/products`: Retrieve all products
+- POST `/product`: Add new product
+- POST `/checkout`: Single product checkout
+- POST `/cart/checkout`: Multiple products checkout
