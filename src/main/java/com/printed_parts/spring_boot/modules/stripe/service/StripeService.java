@@ -11,7 +11,9 @@ import com.stripe.param.checkout.SessionCreateParams;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // stripe - api
 // params: productName, amount, quantity, currency
@@ -33,7 +35,8 @@ public class StripeService {
         ProductItem item = new ProductItem(
                 productRequest.getAmount(),
                 productRequest.getQuantity(),
-                productRequest.getName()
+                productRequest.getName(),
+                null  // No product ID in the legacy flow
         );
 
         // Create a CartRequest with a single item
@@ -62,21 +65,35 @@ public class StripeService {
                 
         // Add each item from the cart as a line item
         for (ProductItem item : cartRequest.getItems()) {
-            // Create product data for this item
-            SessionCreateParams.LineItem.PriceData.ProductData productData = 
-                    SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                            .setName(item.getName())
-                            .build();
-            
             // Create price data for this item
+            String productName = item.getName();
+            
+            // Encode product information in the name since metadata isn't available
+            if (item.getProductId() != null) {
+                // Always include the product ID in the line item description
+                // Format: "Product Name [ID:123]" - consistent format for webhook parsing
+                productName = productName + " [ID:" + item.getProductId() + "]";
+                
+                System.out.println("Adding item to cart with ID: " + item.getProductId() + 
+                        ", name: " + item.getName() + 
+                        ", price: " + item.getAmount() + 
+                        ", quantity: " + item.getQuantity());
+            } else {
+                System.out.println("Warning: Cart item has no product ID: " + productName);
+            }
+            
             SessionCreateParams.LineItem.PriceData priceData = 
                     SessionCreateParams.LineItem.PriceData.builder()
                             .setCurrency(currency)
                             .setUnitAmount(item.getAmount())
-                            .setProductData(productData)
+                            .setProductData(
+                                SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                                    .setName(productName)
+                                    .build()
+                            )
                             .build();
             
-            // Create line item with the above price data
+            // Create line item with the price data
             SessionCreateParams.LineItem lineItem = 
                     SessionCreateParams.LineItem.builder()
                             .setQuantity(item.getQuantity())

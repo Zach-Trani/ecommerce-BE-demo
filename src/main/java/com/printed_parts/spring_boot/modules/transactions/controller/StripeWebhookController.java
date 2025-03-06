@@ -4,6 +4,7 @@ import com.printed_parts.spring_boot.modules.transactions.entity.Transaction;
 import com.printed_parts.spring_boot.modules.transactions.entity.TransactionItem;
 import com.printed_parts.spring_boot.modules.transactions.repository.TransactionRepository;
 import com.stripe.exception.SignatureVerificationException;
+// import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
@@ -36,283 +37,425 @@ public class StripeWebhookController {
 
     public StripeWebhookController(TransactionRepository transactionRepository) {
         this.transactionRepository = transactionRepository;
-        log.info("StripeWebhookController initialized with webhook secret: {}...", 
-                webhookSecret != null ? webhookSecret.substring(0, Math.min(6, webhookSecret.length())) : "null");
     }
 
+    /**
+     * Main webhook handler that receives events from Stripe.
+     * This verifies the signature and dispatches to event-specific handlers.
+     */
     @PostMapping
     public ResponseEntity<String> handleStripeWebhook(
             @RequestBody String payload,
             @RequestHeader("Stripe-Signature") String sigHeader) {
         
-        // DETAILED DEBUG LOGGING
-        log.info("============ WEBHOOK REQUEST RECEIVED ============");
-        log.info("Received webhook payload length: {} bytes", payload != null ? payload.length() : 0);
-        log.info("First 100 chars of payload: {}", payload != null ? 
-                payload.substring(0, Math.min(payload.length(), 100)) + "..." : "null");
-        log.info("Signature header: {}", sigHeader);
-        log.info("Using webhook secret starting with: {}", 
-                webhookSecret != null ? webhookSecret.substring(0, Math.min(6, webhookSecret.length())) : "null");
-
-        if (payload == null || payload.isEmpty()) {
-            log.error("Webhook payload is null or empty");
-            return ResponseEntity.badRequest().body("Webhook payload is empty");
+        // Basic input validation
+        if (payload == null || payload.isEmpty() || sigHeader == null || sigHeader.isEmpty()) {
+            log.error("Invalid webhook request: missing payload or signature");
+            return ResponseEntity.badRequest().body("Missing payload or signature");
         }
 
-        if (sigHeader == null || sigHeader.isEmpty()) {
-            log.error("Stripe-Signature header is null or empty");
-            return ResponseEntity.badRequest().body("Stripe-Signature header is missing");
-        }
-
-        if (webhookSecret == null || webhookSecret.isEmpty()) {
-            log.error("Webhook secret is null or empty");
-            return ResponseEntity.badRequest().body("Webhook secret is not configured");
-        }
-
-        // Verify webhook signature
+        // STRIPE BOILERPLATE: Verify webhook signature
         Event event;
         try {
-            log.debug("Attempting to construct event from payload and signature");
             event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
-            log.info("Event verified successfully: {} with ID: {}", event.getType(), event.getId());
+            log.info("Webhook received: {} [{}]", event.getType(), event.getId());
         } catch (SignatureVerificationException e) {
-            log.error("Signature verification failed: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body("Invalid signature: " + e.getMessage());
+            log.error("Invalid signature: {}", e.getMessage());
+            return ResponseEntity.badRequest().body("Invalid signature");
         } catch (Exception e) {
-            log.error("Error parsing webhook: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body("Webhook error: " + e.getMessage());
+            log.error("Error parsing webhook: {}", e.getMessage());
+            return ResponseEntity.badRequest().body("Webhook error");
         }
         
-        // Get session ID and check for duplicate processing
+        // CUSTOM APP LOGIC: Check for duplicate processing
         String sessionId = getSessionIdFromEvent(event);
-        log.info("Extracted session ID: {}", sessionId);
-        
         Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
         if (existingTransaction.isPresent()) {
-            log.info("Event already processed for session ID: {}", sessionId);
+            log.info("Event already processed: {}", sessionId);
             return ResponseEntity.ok("Event already processed");
         }
 
-        // Handle different event types
+        // CUSTOM APP LOGIC: Handle different event types
         try {
-            log.info("Processing event type: {}", event.getType());
             switch (event.getType()) {
                 case "checkout.session.completed":
-                    log.info("Handling checkout.session.completed event");
                     handleCheckoutSessionCompleted(event);
                     break;
                 case "payment_intent.succeeded":
-                    log.info("Handling payment_intent.succeeded event");
                     handlePaymentIntentSucceeded(event);
-                    break;
-                case "charge.succeeded":
-                    log.info("Charge succeeded event received: {}", event.getId());
                     break;
                 default:
                     log.info("Unhandled event type: {}", event.getType());
             }
-            return ResponseEntity.ok("Webhook processed successfully for event: " + event.getType());
+            return ResponseEntity.ok("Webhook processed");
         } catch (Exception e) {
             log.error("Error processing webhook: {}", e.getMessage(), e);
-            return ResponseEntity.ok("Webhook received, but error during processing: " + e.getMessage());
+            return ResponseEntity.ok("Webhook received, but error during processing");
         }
     }
 
     /**
-     * Extract a session ID from the event
-     * If it's a checkout.session event, try to get the actual session ID
-     * Otherwise, generate a synthetic session ID from the event ID
+     * CUSTOM APP LOGIC: Extract a session ID from the event
      */
     private String getSessionIdFromEvent(Event event) {
-        log.debug("Extracting session ID from event type: {}", event.getType());
-        
         if ("checkout.session.completed".equals(event.getType())) {
             try {
+                // First try to get it from the event data object 
                 EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-                log.debug("Deserializer has object: {}", deserializer.getObject().isPresent());
-                
                 if (deserializer.getObject().isPresent()) {
                     StripeObject stripeObject = deserializer.getObject().get();
-                    log.debug("StripeObject class: {}", stripeObject.getClass().getName());
-                    
                     if (stripeObject instanceof Session) {
-                        Session session = (Session) stripeObject;
-                        String id = session.getId();
-                        log.debug("Extracted session ID: {}", id);
-                        return id;
-                    } else {
-                        log.warn("Expected Session object but got: {}", stripeObject.getClass().getName());
+                        return ((Session) stripeObject).getId();
                     }
-                } else {
-                    log.warn("Failed to get object from deserializer");
+                }
+                
+                // If that fails, try to parse it directly from the raw JSON
+                try {
+                    String rawJson = event.toJson();
+                    // Look for the session ID in the raw JSON data
+                    if (rawJson.contains("\"id\":")) {
+                        // Find the session ID in the object section
+                        int objectIdStart = rawJson.indexOf("\"object\":");
+                        if (objectIdStart > 0) {
+                            int idStart = rawJson.indexOf("\"id\":", objectIdStart);
+                            if (idStart > 0) {
+                                idStart = rawJson.indexOf("\"", idStart + 5) + 1; // Skip past "id": "
+                                int idEnd = rawJson.indexOf("\"", idStart);
+                                if (idEnd > idStart) {
+                                    String sessionId = rawJson.substring(idStart, idEnd);
+                                    if (sessionId.startsWith("cs_")) {
+                                        log.info("Successfully extracted session ID from JSON: {}", sessionId);
+                                        return sessionId;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Error extracting session ID from JSON: {}", e.getMessage());
                 }
             } catch (Exception e) {
-                log.warn("Could not extract session ID from checkout.session event: {}", e.getMessage(), e);
+                log.warn("Could not extract session ID from event: {}", e.getMessage());
             }
         }
         
-        // Fallback: create a synthetic session ID from the event ID
+        // If still no session ID, create a synthetic one 
         String fallbackId = "sess_" + event.getId().substring(event.getId().length() - 10);
-        log.debug("Using fallback session ID: {}", fallbackId);
+        log.warn("Using fallback session ID: {} (this will not work for retrieving data from Stripe)", fallbackId);
         return fallbackId;
     }
 
+    /**
+     * CUSTOM APP LOGIC: Handle checkout.session.completed events
+     */
     private void handleCheckoutSessionCompleted(Event event) {
-        log.info("=== HANDLING CHECKOUT SESSION COMPLETED ===");
+        log.info("Handling checkout.session.completed event: {}", event.getId());
         try {
             // Try to process as a normal session first
-            log.debug("Attempting to process checkout session normally");
-            if (processCheckoutSession(event)) {
-                log.info("Successfully processed checkout session");
+            boolean processed = processCheckoutSession(event);
+            if (processed) {
+                log.info("Successfully processed checkout session: {}", event.getId());
                 return;
             }
             
-            // If that fails, fall back to creating a generic transaction
-            log.info("Unable to process checkout session normally, creating generic transaction");
+            // If session processing failed, explain why we're falling back
+            log.warn("Failed to process checkout session normally. This may occur if:");
+            log.warn("1. The Stripe session could not be deserialized from the event");
+            log.warn("2. The event data does not contain a valid Session object");
+            log.warn("3. There was an error retrieving line items from the session");
+            log.warn("Falling back to generic transaction for event: {}", event.getId());
+            
+            // Create a generic transaction as fallback
             createGenericTransaction(event);
         } catch (Exception e) {
             log.error("Error processing checkout session: {}", e.getMessage(), e);
-            // Still try to create a generic transaction as a last resort
             try {
-                log.info("Attempting fallback to generic transaction after error");
+                log.warn("Attempting fallback to generic transaction due to error: {}", e.getMessage());
                 createGenericTransaction(event);
             } catch (Exception ex) {
-                log.error("Even generic transaction creation failed: {}", ex.getMessage(), ex);
+                log.error("Generic transaction creation failed: {}", ex.getMessage(), ex);
             }
         }
     }
     
     /**
-     * Tries to process a checkout session event by deserializing to a Session object
-     * @return true if successful, false if needs fallback
+     * CUSTOM APP LOGIC: Process a checkout session event by directly retrieving the Stripe session
      */
     private boolean processCheckoutSession(Event event) {
-        log.debug("Processing checkout session for event ID: {}", event.getId());
+        log.info("Attempting to process checkout session for event: {}", event.getId());
         try {
-            EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-            log.debug("Deserializer has object present: {}", deserializer.getObject().isPresent());
+            // Get the session ID using our improved method
+            String sessionId = getSessionIdFromEvent(event);
+            log.info("Using session ID: {}", sessionId);
             
-            if (deserializer.getObject().isPresent()) {
-                StripeObject stripeObject = deserializer.getObject().get();
-                log.debug("Stripe object class: {}", stripeObject.getClass().getName());
+            // Check if this session has already been processed
+            Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
+            if (existingTransaction.isPresent()) {
+                log.info("Session already processed: {}", sessionId);
+                return true;
+            }
+            
+            // Extract customer email and amount from the raw JSON if possible
+            String customerEmail = "webhook@example.com";
+            BigDecimal amount = BigDecimal.ZERO;
+            String currency = "usd";
+            String paymentIntentId = null;
+            boolean isDataExtracted = false;
+            
+            try {
+                String rawJson = event.toJson();
+                log.info("Attempting to extract transaction data from raw event JSON");
                 
-                if (stripeObject instanceof Session) {
-                    Session session = (Session) stripeObject;
-                    String sessionId = session.getId();
-                    
-                    log.info("Processing checkout.session.completed for session ID: {}", sessionId);
-                    log.debug("Session details - payment intent: {}, customer email: {}, amount: {}, currency: {}", 
-                            session.getPaymentIntent(), session.getCustomerEmail(), 
-                            session.getAmountTotal(), session.getCurrency());
-                    
-                    // Check if this session has already been processed
-                    Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
-                    if (existingTransaction.isPresent()) {
-                        log.info("Transaction already exists for session ID: {}", sessionId);
-                        return true;
+                // Extract customer email
+                int customerDetailsIndex = rawJson.indexOf("\"customer_details\":");
+                if (customerDetailsIndex > 0) {
+                    int emailIndex = rawJson.indexOf("\"email\":", customerDetailsIndex);
+                    if (emailIndex > 0) {
+                        emailIndex = rawJson.indexOf("\"", emailIndex + 8) + 1; // Skip past "email": "
+                        int emailEndIndex = rawJson.indexOf("\"", emailIndex);
+                        if (emailEndIndex > emailIndex) {
+                            customerEmail = rawJson.substring(emailIndex, emailEndIndex);
+                            log.info("Extracted customer email: {}", customerEmail);
+                        }
                     }
-                    
-                    // Create a new transaction
-                    Transaction transaction = new Transaction();
-                    transaction.setStripeSessionId(sessionId);
-                    transaction.setStripePaymentIntentId(session.getPaymentIntent());
-                    transaction.setCustomerEmail(session.getCustomerEmail());
-                    transaction.setTotalAmount(new BigDecimal(session.getAmountTotal()).divide(new BigDecimal(100)));
-                    transaction.setCurrency(session.getCurrency());
-                    transaction.setPaymentStatus("COMPLETED");
-                    transaction.setTransactionDate(LocalDateTime.now());
-                    
-                    // Save transaction first to get an ID
-                    log.debug("Saving initial transaction record");
-                    transaction = transactionRepository.save(transaction);
-                    log.info("Saved transaction with ID: {}", transaction.getId());
-                    
-                    // Create transaction items
-                    List<TransactionItem> transactionItems = new ArrayList<>();
-                    
+                }
+                
+                // Extract amount
+                int amountIndex = rawJson.indexOf("\"amount_total\":");
+                if (amountIndex > 0) {
+                    amountIndex += 15; // Skip past "amount_total":
+                    int amountEndIndex = rawJson.indexOf(",", amountIndex);
+                    if (amountEndIndex > amountIndex) {
+                        String amountStr = rawJson.substring(amountIndex, amountEndIndex).trim();
+                        try {
+                            long amountCents = Long.parseLong(amountStr);
+                            amount = new BigDecimal(amountCents).divide(new BigDecimal(100));
+                            log.info("Extracted amount: {}", amount);
+                        } catch (NumberFormatException e) {
+                            log.warn("Failed to parse amount: {}", amountStr);
+                        }
+                    }
+                }
+                
+                // Extract currency
+                int currencyIndex = rawJson.indexOf("\"currency\":");
+                if (currencyIndex > 0) {
+                    currencyIndex = rawJson.indexOf("\"", currencyIndex + 11) + 1; // Skip past "currency": "
+                    int currencyEndIndex = rawJson.indexOf("\"", currencyIndex);
+                    if (currencyEndIndex > currencyIndex) {
+                        currency = rawJson.substring(currencyIndex, currencyEndIndex);
+                        log.info("Extracted currency: {}", currency);
+                    }
+                }
+                
+                // Extract payment intent ID
+                int paymentIntentIndex = rawJson.indexOf("\"payment_intent\":");
+                if (paymentIntentIndex > 0) {
+                    paymentIntentIndex = rawJson.indexOf("\"", paymentIntentIndex + 17) + 1; // Skip past "payment_intent": "
+                    int paymentIntentEndIndex = rawJson.indexOf("\"", paymentIntentIndex);
+                    if (paymentIntentEndIndex > paymentIntentIndex) {
+                        paymentIntentId = rawJson.substring(paymentIntentIndex, paymentIntentEndIndex);
+                        log.info("Extracted payment intent ID: {}", paymentIntentId);
+                    }
+                }
+                
+                isDataExtracted = true;
+            } catch (Exception e) {
+                log.warn("Failed to extract data from event JSON: {}", e.getMessage());
+            }
+            
+            // Create a new transaction record
+            Transaction transaction = new Transaction();
+            transaction.setStripeSessionId(sessionId);
+            transaction.setStripePaymentIntentId(paymentIntentId);
+            transaction.setCustomerEmail(customerEmail);
+            transaction.setTotalAmount(amount);
+            transaction.setCurrency(currency);
+            transaction.setPaymentStatus("COMPLETED");
+            transaction.setTransactionDate(LocalDateTime.now());
+            
+            log.info("Created transaction with session ID: {}, amount: {}", sessionId, amount);
+            
+            // Save transaction first to get an ID
+            transaction = transactionRepository.save(transaction);
+            
+            // Now try to retrieve line items
+            // Two approaches:
+            // 1. Try to parse from raw JSON if available
+            // 2. If that fails, try to retrieve from Stripe API
+            List<TransactionItem> transactionItems = new ArrayList<>();
+            boolean itemsCreated = false;
+            
+            try {
+                // First try the Stripe API approach if we have a valid session ID
+                if (sessionId.startsWith("cs_")) {
+                    log.info("Attempting to retrieve session from Stripe with ID: {}", sessionId);
                     try {
-                        // Attempt to retrieve line items
-                        log.debug("Attempting to retrieve line items for session: {}", sessionId);
+                        Session session = Session.retrieve(sessionId);
+                        log.info("Successfully retrieved session from Stripe API");
+                        
+                        // Now get line items
+                        log.info("Retrieving line items for session: {}", sessionId);
                         SessionListLineItemsParams params = SessionListLineItemsParams.builder().build();
                         LineItemCollection lineItems = session.listLineItems(params);
                         
-                        log.debug("Retrieved {} line items", lineItems.getData().size());
+                        log.info("Found {} line items", lineItems.getData().size());
+                        
                         for (LineItem lineItem : lineItems.getData()) {
-                            TransactionItem item = new TransactionItem();
-                            item.setProductName(lineItem.getDescription());
-                            item.setProductId(lineItem.getPrice().getId());
-                            item.setQuantity(lineItem.getQuantity());
-                            item.setPrice(new BigDecimal(lineItem.getPrice().getUnitAmount()).divide(new BigDecimal(100)));
-                            item.setTotalPrice(item.getPrice().multiply(new BigDecimal(item.getQuantity())));
-                            item.setTransaction(transaction);
+                            // Process each line item as before
+                            TransactionItem item = createTransactionItemFromLineItem(lineItem, transaction);
                             transactionItems.add(item);
-                            log.debug("Added item: {} x{} at price {} for total {}", 
-                                    item.getProductName(), item.getQuantity(), item.getPrice(), item.getTotalPrice());
                         }
+                        
+                        itemsCreated = true;
                     } catch (Exception e) {
-                        // If retrieving line items fails, create a single transaction item
-                        log.warn("Failed to retrieve line items, creating a single transaction item: {}", e.getMessage(), e);
-                        TransactionItem item = new TransactionItem();
-                        item.setProductName("Order #" + sessionId.substring(sessionId.length() - 6));
-                        item.setProductId(sessionId);
-                        item.setQuantity(1L);
-                        item.setPrice(transaction.getTotalAmount());
-                        item.setTotalPrice(transaction.getTotalAmount());
-                        item.setTransaction(transaction);
-                        transactionItems.add(item);
-                        log.debug("Added fallback item: {} for total {}", item.getProductName(), item.getTotalPrice());
+                        log.error("Failed to retrieve session or line items from Stripe: {}", e.getMessage(), e);
                     }
-                    
-                    // Set items and save again
-                    transaction.setItems(transactionItems);
-                    log.debug("Saving transaction with {} items", transactionItems.size());
-                    transactionRepository.save(transaction);
-                    log.info("Transaction completed successfully with {} items", transactionItems.size());
-                    return true;
-                } else {
-                    log.warn("Object is not a Session: {}", stripeObject.getClass().getName());
-                    return false;
                 }
-            } else {
-                log.warn("Unable to deserialize event object for checkout.session.completed");
-                return false;
+                
+                // If we couldn't get items from Stripe API, create a fallback item
+                if (!itemsCreated) {
+                    log.warn("Could not retrieve line items - creating fallback transaction item");
+                    TransactionItem item = new TransactionItem();
+                    item.setProductName("Order from " + customerEmail);
+                    item.setProductId(sessionId);
+                    item.setQuantity(1L);
+                    item.setPrice(amount);
+                    item.setTotalPrice(amount);
+                    item.setTransaction(transaction);
+                    transactionItems.add(item);
+                }
+            } catch (Exception e) {
+                log.error("Error creating transaction items: {}", e.getMessage(), e);
+                // Create generic item
+                TransactionItem item = new TransactionItem();
+                item.setProductName("Order #" + sessionId.substring(sessionId.length() - 6));
+                item.setProductId(sessionId);
+                item.setQuantity(1L);
+                item.setPrice(amount);
+                item.setTotalPrice(amount);
+                item.setTransaction(transaction);
+                transactionItems.add(item);
             }
+            
+            // Set items and save again
+            transaction.setItems(transactionItems);
+            transactionRepository.save(transaction);
+            log.info("Transaction saved with {} items", transactionItems.size());
+            return true;
         } catch (Exception e) {
             log.error("Error processing checkout session: {}", e.getMessage(), e);
             return false;
         }
     }
     
+    // Helper method to create a transaction item from a line item
+    private TransactionItem createTransactionItemFromLineItem(LineItem lineItem, Transaction transaction) {
+        TransactionItem item = new TransactionItem();
+        
+        // Get the raw description before any parsing
+        String description = lineItem.getDescription();
+        log.info("Processing line item with description: '{}'", description);
+        
+        String productId = null;
+        Integer productIdInt = null;
+        
+        // Extract product ID from item description if it contains "[ID:123]" format
+        if (description != null && description.contains("[ID:")) {
+            try {
+                int startIndex = description.indexOf("[ID:") + 4;
+                int endIndex = description.indexOf("]", startIndex);
+                if (endIndex > startIndex) {
+                    productId = description.substring(startIndex, endIndex).trim();
+                    log.info("Extracted product ID: {} from description", productId);
+                    
+                    try {
+                        productIdInt = Integer.parseInt(productId);
+                        log.info("Converted to integer product ID: {}", productIdInt);
+                    } catch (NumberFormatException e) {
+                        log.warn("Product ID is not a valid integer: {}", productId);
+                    }
+                    
+                    // Clean the product name by removing the ID part
+                    description = description.substring(0, description.indexOf("[ID:")).trim();
+                    log.info("Clean product name: '{}'", description);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse product ID from description: {} - {}", description, e.getMessage());
+                // Continue processing even if ID extraction fails
+            }
+        } else {
+            log.warn("Description does not contain product ID format: '{}'", description);
+        }
+        
+        // Set product name (cleaned if ID was extracted, or original otherwise)
+        item.setProductName(description);
+        
+        // Use extracted internal product ID if available, otherwise use Stripe's ID
+        item.setProductId(productId != null ? productId : lineItem.getPrice().getId());
+        
+        // Set other item properties from the Stripe line item
+        log.info("Line item raw data - quantity: {}, unit_amount: {}", 
+                lineItem.getQuantity(), lineItem.getPrice().getUnitAmount());
+        
+        item.setQuantity(lineItem.getQuantity());
+        item.setPrice(new BigDecimal(lineItem.getPrice().getUnitAmount()).divide(new BigDecimal(100)));
+        item.setTotalPrice(item.getPrice().multiply(new BigDecimal(item.getQuantity())));
+        item.setTransaction(transaction);
+        
+        log.info("Added transaction item: productId={}, name='{}', price={}, quantity={}, total={}",
+                item.getProductId(), item.getProductName(), item.getPrice(), item.getQuantity(), item.getTotalPrice());
+        
+        return item;
+    }
+    
+    /**
+     * CUSTOM APP LOGIC: Create a generic transaction when proper session data can't be retrieved
+     */
     private void createGenericTransaction(Event event) {
-        log.info("Creating generic transaction for event: {}", event.getId());
+        log.info("Creating generic transaction for event type: {}, event ID: {}", event.getType(), event.getId());
         try {
             // Generate a session ID from the event ID
             String sessionId = getSessionIdFromEvent(event);
-            String paymentIntentId = null;
             
-            log.debug("Using session ID: {} for generic transaction", sessionId);
+            // Try to get some meaningful data from the event
+            String customerEmail = "webhook@example.com";
+            BigDecimal amount = BigDecimal.ZERO;
+            String currency = "USD";
             
-            // Check if this session has already been processed
+            // Try to extract some data from the raw event JSON if possible
+            try {
+                String rawJson = event.toJson();
+                log.info("Raw event JSON: {}", rawJson);
+                
+                // Log the data to help with debugging
+                log.info("Stripe event raw data - ID: {}, API Version: {}, Type: {}", 
+                        event.getId(), event.getApiVersion(), event.getType());
+            } catch (Exception e) {
+                log.warn("Could not extract raw event data: {}", e.getMessage());
+            }
+            
+            // Check for duplicate transactions
             Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
             if (existingTransaction.isPresent()) {
-                log.info("Transaction already exists for session ID: {}", sessionId);
+                log.info("Generic transaction already exists for session: {}", sessionId);
                 return;
             }
             
             // Create a new transaction with minimal information
             Transaction transaction = new Transaction();
             transaction.setStripeSessionId(sessionId);
-            transaction.setStripePaymentIntentId(paymentIntentId);
-            transaction.setCustomerEmail("webhook@example.com");
-            transaction.setTotalAmount(BigDecimal.ZERO); // We don't know the amount
-            transaction.setCurrency("USD"); // Default currency
+            transaction.setStripePaymentIntentId(null);
+            transaction.setCustomerEmail(customerEmail);
+            transaction.setTotalAmount(amount);
+            transaction.setCurrency(currency);
             transaction.setPaymentStatus("COMPLETED");
             transaction.setTransactionDate(LocalDateTime.now());
             
+            log.info("Created generic transaction with session ID: {} (fallback mechanism)", sessionId);
+            
             // Save transaction first to get an ID
-            log.debug("Saving generic transaction record");
             transaction = transactionRepository.save(transaction);
-            log.info("Saved generic transaction with ID: {}", transaction.getId());
             
             // Create a single transaction item
             List<TransactionItem> transactionItems = new ArrayList<>();
@@ -327,76 +470,50 @@ public class StripeWebhookController {
             
             // Set items and save again
             transaction.setItems(transactionItems);
-            log.debug("Saving generic transaction with 1 item");
             transactionRepository.save(transaction);
-            log.info("Generic transaction completed successfully");
+            log.warn("Saved generic transaction with placeholder values - please check Stripe Dashboard for actual order details");
+            log.warn("To fix this issue, you may need to update the Stripe API version or check the webhook payload format");
         } catch (Exception e) {
             log.error("Error creating generic transaction: {}", e.getMessage(), e);
         }
     }
     
+    /**
+     * CUSTOM APP LOGIC: Handle payment_intent.succeeded events
+     */
     private void handlePaymentIntentSucceeded(Event event) {
-        log.info("=== HANDLING PAYMENT INTENT SUCCEEDED ===");
         try {
             String paymentIntentId = extractPaymentIntentId(event);
             if (paymentIntentId != null) {
-                log.info("Extracted payment intent ID: {}", paymentIntentId);
-                
-                // If we have a transaction with this payment intent ID already
+                // Update existing transaction if found
                 Optional<Transaction> existingTransaction = transactionRepository.findByStripePaymentIntentId(paymentIntentId);
                 if (existingTransaction.isPresent()) {
-                    log.info("Transaction exists for payment intent ID: {}, updating status", paymentIntentId);
-                    updatePaymentStatusForIntent(paymentIntentId);
-                } else {
-                    log.info("No transaction found for payment intent ID: {}, this may be normal if checkout.session was processed first", paymentIntentId);
+                    Transaction transaction = existingTransaction.get();
+                    transaction.setPaymentStatus("COMPLETED");
+                    transactionRepository.save(transaction);
+                    log.info("Updated payment status for transaction ID: {}", transaction.getId());
                 }
-            } else {
-                log.warn("Could not extract payment intent ID from event");
             }
         } catch (Exception e) {
-            log.error("Error handling payment_intent.succeeded event: {}", e.getMessage(), e);
+            log.error("Error handling payment intent: {}", e.getMessage());
         }
     }
     
+    /**
+     * STRIPE BOILERPLATE: Extract a payment intent ID from the event
+     */
     private String extractPaymentIntentId(Event event) {
-        log.debug("Extracting payment intent ID from event: {}", event.getId());
         try {
             EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
             if (deserializer.getObject().isPresent()) {
                 StripeObject stripeObject = deserializer.getObject().get();
-                log.debug("Payment intent object class: {}", stripeObject.getClass().getName());
-                
                 if (stripeObject instanceof PaymentIntent) {
-                    PaymentIntent paymentIntent = (PaymentIntent) stripeObject;
-                    String id = paymentIntent.getId();
-                    log.debug("Extracted payment intent ID: {}", id);
-                    return id;
-                } else {
-                    log.warn("Expected PaymentIntent object but got: {}", stripeObject.getClass().getName());
+                    return ((PaymentIntent) stripeObject).getId();
                 }
-            } else {
-                log.warn("Payment intent event deserializer couldn't get object");
             }
         } catch (Exception e) {
-            log.warn("Error extracting payment intent ID: {}", e.getMessage(), e);
+            log.warn("Error extracting payment intent ID: {}", e.getMessage());
         }
         return null;
-    }
-    
-    private void updatePaymentStatusForIntent(String paymentIntentId) {
-        log.info("Updating payment status for intent: {}", paymentIntentId);
-        try {
-            Optional<Transaction> transactionOpt = transactionRepository.findByStripePaymentIntentId(paymentIntentId);
-            if (transactionOpt.isPresent()) {
-                Transaction transaction = transactionOpt.get();
-                transaction.setPaymentStatus("COMPLETED");
-                transactionRepository.save(transaction);
-                log.info("Updated transaction {} payment status to COMPLETED", transaction.getId());
-            } else {
-                log.warn("No transaction found for payment intent ID: {}", paymentIntentId);
-            }
-        } catch (Exception e) {
-            log.error("Error updating payment status: {}", e.getMessage(), e);
-        }
     }
 }
