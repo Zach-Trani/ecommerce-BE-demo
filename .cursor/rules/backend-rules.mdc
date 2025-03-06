@@ -1,12 +1,10 @@
 ---
-description: Guidelines for Projectr 
+description: Guidelines for Project
 globs: *.java, *.properties, *.yml
 alwaysApply: false
 ---
 
 # Review the Project Changelog and Project Directory notes below for our Ecommerce App's Spring Boot Back End. This back end interacts with a React Typescript Front End.
-
-## Project Changelog
 
 # Project Changelog
 
@@ -83,3 +81,6 @@ v1.7 - Frontend Integration
 - POST `/product`: Add new product
 - POST `/checkout`: Single product checkout
 - POST `/cart/checkout`: Multiple products checkout
+
+## Backlog
+- Remove legacy checkout approach with one product
