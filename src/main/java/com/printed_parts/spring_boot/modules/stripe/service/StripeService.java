@@ -79,7 +79,8 @@ public class StripeService {
                         ", price: " + item.getAmount() + 
                         ", quantity: " + item.getQuantity());
             } else {
-                System.out.println("Warning: Cart item has no product ID: " + productName);
+                System.out.println("WARNING: Cart item has no product ID: " + productName + 
+                        ". This will cause Stripe's price ID to be used instead in the webhook.");
             }
             
             SessionCreateParams.LineItem.PriceData priceData = 

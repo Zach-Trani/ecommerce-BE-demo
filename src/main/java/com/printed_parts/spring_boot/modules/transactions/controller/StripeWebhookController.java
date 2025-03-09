@@ -187,13 +187,13 @@ public class StripeWebhookController {
             // Get the session ID using our improved method
             String sessionId = getSessionIdFromEvent(event);
             log.info("Using session ID: {}", sessionId);
-            
-            // Check if this session has already been processed
-            Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
-            if (existingTransaction.isPresent()) {
+                    
+                    // Check if this session has already been processed
+                    Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
+                    if (existingTransaction.isPresent()) {
                 log.info("Session already processed: {}", sessionId);
-                return true;
-            }
+                        return true;
+                    }
             
             // Extract customer email and amount from the raw JSON if possible
             String customerEmail = "webhook@example.com";
@@ -263,27 +263,27 @@ public class StripeWebhookController {
             } catch (Exception e) {
                 log.warn("Failed to extract data from event JSON: {}", e.getMessage());
             }
-            
-            // Create a new transaction record
-            Transaction transaction = new Transaction();
-            transaction.setStripeSessionId(sessionId);
+                    
+                    // Create a new transaction record
+                    Transaction transaction = new Transaction();
+                    transaction.setStripeSessionId(sessionId);
             transaction.setStripePaymentIntentId(paymentIntentId);
             transaction.setCustomerEmail(customerEmail);
             transaction.setTotalAmount(amount);
             transaction.setCurrency(currency);
-            transaction.setPaymentStatus("COMPLETED");
-            transaction.setTransactionDate(LocalDateTime.now());
+                    transaction.setPaymentStatus("COMPLETED");
+                    transaction.setTransactionDate(LocalDateTime.now());
             
             log.info("Created transaction with session ID: {}, amount: {}", sessionId, amount);
-            
-            // Save transaction first to get an ID
-            transaction = transactionRepository.save(transaction);
-            
+                    
+                    // Save transaction first to get an ID
+                    transaction = transactionRepository.save(transaction);
+                    
             // Now try to retrieve line items
             // Two approaches:
             // 1. Try to parse from raw JSON if available
             // 2. If that fails, try to retrieve from Stripe API
-            List<TransactionItem> transactionItems = new ArrayList<>();
+                    List<TransactionItem> transactionItems = new ArrayList<>();
             boolean itemsCreated = false;
             
             try {
@@ -308,7 +308,7 @@ public class StripeWebhookController {
                         }
                         
                         itemsCreated = true;
-                    } catch (Exception e) {
+                                } catch (Exception e) {
                         log.error("Failed to retrieve session or line items from Stripe: {}", e.getMessage(), e);
                     }
                 }
@@ -322,27 +322,27 @@ public class StripeWebhookController {
                     item.setQuantity(1L);
                     item.setPrice(amount);
                     item.setTotalPrice(amount);
-                    item.setTransaction(transaction);
-                    transactionItems.add(item);
-                }
-            } catch (Exception e) {
+                            item.setTransaction(transaction);
+                            transactionItems.add(item);
+                        }
+                    } catch (Exception e) {
                 log.error("Error creating transaction items: {}", e.getMessage(), e);
                 // Create generic item
-                TransactionItem item = new TransactionItem();
-                item.setProductName("Order #" + sessionId.substring(sessionId.length() - 6));
-                item.setProductId(sessionId);
-                item.setQuantity(1L);
+                        TransactionItem item = new TransactionItem();
+                        item.setProductName("Order #" + sessionId.substring(sessionId.length() - 6));
+                        item.setProductId(sessionId);
+                        item.setQuantity(1L);
                 item.setPrice(amount);
                 item.setTotalPrice(amount);
-                item.setTransaction(transaction);
-                transactionItems.add(item);
-            }
-            
-            // Set items and save again
-            transaction.setItems(transactionItems);
-            transactionRepository.save(transaction);
-            log.info("Transaction saved with {} items", transactionItems.size());
-            return true;
+                        item.setTransaction(transaction);
+                        transactionItems.add(item);
+                    }
+                    
+                    // Set items and save again
+                    transaction.setItems(transactionItems);
+                    transactionRepository.save(transaction);
+                    log.info("Transaction saved with {} items", transactionItems.size());
+                    return true;
         } catch (Exception e) {
             log.error("Error processing checkout session: {}", e.getMessage(), e);
             return false;
@@ -381,7 +381,7 @@ public class StripeWebhookController {
                     log.info("Clean product name: '{}'", description);
                 }
             } catch (Exception e) {
-                log.warn("Failed to parse product ID from description: {} - {}", description, e.getMessage());
+                log.error("Failed to parse product ID from description: {} - {}", description, e.getMessage(), e);
                 // Continue processing even if ID extraction fails
             }
         } else {
@@ -391,8 +391,18 @@ public class StripeWebhookController {
         // Set product name (cleaned if ID was extracted, or original otherwise)
         item.setProductName(description);
         
-        // Use extracted internal product ID if available, otherwise use Stripe's ID
-        item.setProductId(productId != null ? productId : lineItem.getPrice().getId());
+        // FIXED: Use extracted internal product ID if available and log what's happening
+        if (productId != null) {
+            item.setProductId(productId);
+            log.info("Using extracted product ID from description: {}", productId);
+        } else {
+            // This is a fallback that should rarely happen if your products are correctly configured
+            String fallbackId = lineItem.getPrice().getId();
+            item.setProductId(fallbackId);
+            log.warn("⚠️ USING STRIPE PRICE ID AS FALLBACK: {}. THIS INDICATES PRODUCT ID WAS NOT FOUND IN DESCRIPTION.", 
+                    fallbackId);
+            log.warn("Please verify that product IDs are correctly included in product names during checkout.");
+        }
         
         // Set other item properties from the Stripe line item
         log.info("Line item raw data - quantity: {}, unit_amount: {}", 
