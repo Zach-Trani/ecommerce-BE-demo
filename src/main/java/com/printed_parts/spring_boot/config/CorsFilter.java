@@ -24,6 +24,17 @@ public class CorsFilter implements Filter {
         HttpServletRequest request = (HttpServletRequest) req;
         HttpServletResponse response = (HttpServletResponse) res;
         
+        // Check if this is a webhook request from Stripe
+        String requestURI = request.getRequestURI();
+        boolean isStripeWebhook = requestURI.contains("/stripe/webhook");
+        
+        // Skip CORS processing for Stripe webhooks
+        if (isStripeWebhook) {
+            // For Stripe webhooks, just continue the filter chain without CORS headers
+            chain.doFilter(req, res);
+            return;
+        }
+        
         // Get the origin header
         String origin = request.getHeader("Origin");
         
@@ -32,7 +43,7 @@ public class CorsFilter implements Filter {
             response.setHeader("Access-Control-Allow-Origin", origin);
             response.setHeader("Access-Control-Allow-Credentials", "true");
             response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            response.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+            response.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, Stripe-Signature");
             response.setHeader("Access-Control-Max-Age", "3600");
             
             // For OPTIONS requests, just return 200 OK
