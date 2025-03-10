@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+// StripeWebhookController is responsible for receiving and processing webhook events from Stripe after payment processing
 @Slf4j
 @RestController
 @RequestMapping("/stripe/webhook")

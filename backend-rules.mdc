@@ -1,9 +1,3 @@
----
-description: Guidelines for Project
-globs: *.java, *.properties, *.yml
-alwaysApply: false
----
-
 # Review the Project Changelog and Project Directory notes below for our Ecommerce App's Spring Boot Back End. This back end interacts with a React Typescript Front End.
 
 # Project Changelog
@@ -61,7 +55,6 @@ v1.7 - Frontend Integration
   - Configured CORS for frontend-backend communication
   - Implemented path resolution for React Router integration
 
-
 ## Module 3: Transaction Management
 v1.8 - Stripe Webhook Integration
 - Implemented `StripeWebhookController.java` to handle Stripe events:
@@ -81,7 +74,6 @@ v1.8 - Stripe Webhook Integration
   - Webhook controller extracts these IDs from descriptions to maintain database relationships
   - If extraction fails, falls back to using Stripe's price IDs
   - Recent fix: Improved error handling and logging for product ID extraction
-  - stripe listen --forward-to http://localhost:9191/stripe/webhook
 
 ## Current Features
 - Product database management with Azure SQL
