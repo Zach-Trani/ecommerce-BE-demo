@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Review the Project Changelog and Project Directory notes below for our Ecommerce App's Spring Boot Back End. This back end interacts with a React Typescript Front End.
 
 # Project Changelog
@@ -74,6 +79,10 @@ v1.8 - Stripe Webhook Integration
   - Webhook controller extracts these IDs from descriptions to maintain database relationships
   - If extraction fails, falls back to using Stripe's price IDs
   - Recent fix: Improved error handling and logging for product ID extraction
+
+  @backend-rules.mdc im looking to make a new feature - my '/checkout' page on the front end takes in contact information and shipping address information of the customer before they place orders through the stripe module. 
+
+Im think we make a new module called checkout. create a controller with a postmapping for "/checkout" (is this a good practice to match the front url with a matching backend endpoint?). create an entity called customercheckoutdata which is a class that holds different contact information and shipping information that posts to a table called customercheckoutdata when the request body is sent. 
 
 ## Current Features
 - Product database management with Azure SQL

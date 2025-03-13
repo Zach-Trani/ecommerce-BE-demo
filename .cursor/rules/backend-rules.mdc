@@ -83,6 +83,15 @@ v1.8 - Stripe Webhook Integration
   - Recent fix: Improved error handling and logging for product ID extraction
   - stripe listen --forward-to http://localhost:9191/stripe/webhook
 
+  v1.9 - Production Webhook Fix
+- Fixed critical production webhook issues:
+  - Identified and resolved webhook signing secret mismatch in Azure environment
+  - Updated Azure environment variables with the correct Stripe test mode webhook signing secret
+  - Added improved webhook signature validation logging for debugging
+  - Ensured proper environment-specific webhook configuration for test/production modes
+  - Enhanced error handling in StripeWebhookController for better diagnostics
+  - Validated successful transaction recording in the production database after checkout
+
 ## Current Features
 - Product database management with Azure SQL
 - Stripe payment processing for single products
