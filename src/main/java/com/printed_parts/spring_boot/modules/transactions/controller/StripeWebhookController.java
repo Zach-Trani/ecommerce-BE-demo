@@ -41,6 +41,25 @@ public class StripeWebhookController {
     }
 
     /**
+     * Simple diagnostic endpoint to check if the webhook controller is accessible
+     */
+    @GetMapping("/healthcheck")
+    public ResponseEntity<String> healthCheck() {
+        log.info("Webhook healthcheck endpoint accessed");
+        
+        // Check if we can access the database
+        long count = 0;
+        try {
+            count = transactionRepository.count();
+            log.info("Database connection successful. Transaction count: {}", count);
+            return ResponseEntity.ok("Webhook controller is healthy. DB connection ok. Transaction count: " + count);
+        } catch (Exception e) {
+            log.error("Database connection failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body("Webhook controller reached but database error: " + e.getMessage());
+        }
+    }
+
+    /**
      * Main webhook handler that receives events from Stripe.
      * This verifies the signature and dispatches to event-specific handlers.
      */
@@ -48,6 +67,11 @@ public class StripeWebhookController {
     public ResponseEntity<String> handleStripeWebhook(
             @RequestBody String payload,
             @RequestHeader("Stripe-Signature") String sigHeader) {
+        
+        log.info("====== WEBHOOK RECEIVED ======");
+        log.info("Headers: Stripe-Signature length: {}", sigHeader != null ? sigHeader.length() : 0);
+        log.info("Payload length: {}", payload != null ? payload.length() : 0);
+        log.info("Webhook secret configured: {}", webhookSecret != null ? "YES (length: " + webhookSecret.length() + ")" : "NO");
         
         // Basic input validation
         if (payload == null || payload.isEmpty() || sigHeader == null || sigHeader.isEmpty()) {
@@ -58,14 +82,16 @@ public class StripeWebhookController {
         // STRIPE BOILERPLATE: Verify webhook signature
         Event event;
         try {
+            log.info("Attempting to construct event with Webhook.constructEvent...");
             event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
             log.info("Webhook received: {} [{}]", event.getType(), event.getId());
         } catch (SignatureVerificationException e) {
             log.error("Invalid signature: {}", e.getMessage());
+            log.error("This usually means the webhook secret is incorrect. Check your Stripe Dashboard and environment variables.");
             return ResponseEntity.badRequest().body("Invalid signature");
         } catch (Exception e) {
-            log.error("Error parsing webhook: {}", e.getMessage());
-            return ResponseEntity.badRequest().body("Webhook error");
+            log.error("Error parsing webhook: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body("Webhook error: " + e.getMessage());
         }
         
         // CUSTOM APP LOGIC: Check for duplicate processing

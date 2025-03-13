@@ -39,7 +39,11 @@ public class CorsFilter implements Filter {
         String origin = request.getHeader("Origin");
         
         // If this is a valid origin, add it to the response
-        if (origin != null && (origin.contains("localhost") || origin.contains("azurestaticapps.net"))) {
+        if (origin != null && (
+                origin.contains("localhost") || 
+                origin.contains("azurestaticapps.net") ||
+                origin.equals("https://lively-moss-09bc30c10.4.azurestaticapps.net")
+            )) {
             response.setHeader("Access-Control-Allow-Origin", origin);
             response.setHeader("Access-Control-Allow-Credentials", "true");
             response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");

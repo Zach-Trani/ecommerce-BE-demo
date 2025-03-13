@@ -11,6 +11,7 @@ import com.printed_parts.spring_boot.modules.product.entity.Product;
 import com.printed_parts.spring_boot.modules.product.repository.ProductRepository;
 import org.springframework.web.bind.annotation.RestController;
 
+// The product controller handles access to our database entity
 @RestController
 public class ProductController {
 

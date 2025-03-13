@@ -7,6 +7,7 @@ import com.printed_parts.spring_boot.modules.stripe.service.StripeService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+// The Stripe module controller handles the request payload to Stripe
 @RestController
 @RequestMapping("/product/v1")
 public class ProductCheckoutController {
