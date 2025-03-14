@@ -4,7 +4,6 @@ import com.printed_parts.spring_boot.modules.transactions.entity.Transaction;
 import com.printed_parts.spring_boot.modules.transactions.entity.TransactionItem;
 import com.printed_parts.spring_boot.modules.transactions.repository.TransactionRepository;
 import com.stripe.exception.SignatureVerificationException;
-// import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
@@ -25,7 +24,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-// StripeWebhookController is responsible for receiving and processing webhook events from Stripe after payment processing
+/**
+ * Controller responsible for handling Stripe webhook events after payment processing.
+ *
+ * This controller receives events from Stripe when payment-related actions occur, such as:
+ * - Checkout session completion
+ * - Payment intent success
+ * 
+ * It processes these events to create transaction records in the database, facilitating
+ * order history tracking and payment confirmation in the ecommerce application.
+ * 
+ * Data Flow:
+ * 1. Stripe sends webhook event to /stripe/webhook endpoint
+ * 2. Controller verifies webhook signature using the secret key
+ * 3. Event is parsed and handled based on its type
+ * 4. Transaction and TransactionItem objects are created and stored in database
+ */
 @Slf4j
 @RestController
 @RequestMapping("/stripe/webhook")
@@ -41,7 +55,12 @@ public class StripeWebhookController {
     }
 
     /**
-     * Simple diagnostic endpoint to check if the webhook controller is accessible
+     * Simple diagnostic endpoint to check if the webhook controller is accessible.
+     * <p>
+     * This endpoint helps verify both controller accessibility and database connectivity.
+     * 
+     * @return ResponseEntity<String> - HTTP 200 with status message if healthy, 
+     *                                  HTTP 500 with error details if database connection fails
      */
     @GetMapping("/healthcheck")
     public ResponseEntity<String> healthCheck() {
@@ -60,8 +79,17 @@ public class StripeWebhookController {
     }
 
     /**
-     * Main webhook handler that receives events from Stripe.
-     * This verifies the signature and dispatches to event-specific handlers.
+     * Main webhook handler that receives and processes events from Stripe.
+     * <p>
+     * This endpoint:
+     * 1. Verifies the Stripe signature to ensure the event is authentic
+     * 2. Checks for duplicate event processing
+     * 3. Dispatches to appropriate handler based on event type
+     * 
+     * @param payload String - Raw JSON payload from Stripe
+     * @param sigHeader String - 'Stripe-Signature' header containing signature verification data
+     * @return ResponseEntity<String> - HTTP 200 if processed or already handled,
+     *                                  HTTP 400 if signature verification fails or payload is invalid
      */
     @PostMapping
     public ResponseEntity<String> handleStripeWebhook(
@@ -122,7 +150,15 @@ public class StripeWebhookController {
     }
 
     /**
-     * CUSTOM APP LOGIC: Extract a session ID from the event
+     * Extracts the Stripe session ID from an event.
+     * <p>
+     * This method attempts multiple strategies to extract the session ID:
+     * 1. Directly from the deserialized Event object (preferred)
+     * 2. By parsing the raw JSON data
+     * 3. Falling back to a synthetic ID based on the event ID if all else fails
+     * 
+     * @param event Event - The Stripe event object
+     * @return String - The session ID (format: "cs_..." if from Stripe, "sess_..." if synthetic)
      */
     private String getSessionIdFromEvent(Event event) {
         if ("checkout.session.completed".equals(event.getType())) {
@@ -173,7 +209,13 @@ public class StripeWebhookController {
     }
 
     /**
-     * CUSTOM APP LOGIC: Handle checkout.session.completed events
+     * Handles 'checkout.session.completed' events from Stripe.
+     * <p>
+     * This method attempts to process the checkout session using two approaches:
+     * 1. Normal session processing - tries to get detailed line item data
+     * 2. Generic transaction - fallback when session data can't be properly extracted
+     * 
+     * @param event Event - The Stripe event object containing checkout session data
      */
     private void handleCheckoutSessionCompleted(Event event) {
         log.info("Handling checkout.session.completed event: {}", event.getId());
@@ -206,7 +248,17 @@ public class StripeWebhookController {
     }
     
     /**
-     * CUSTOM APP LOGIC: Process a checkout session event by directly retrieving the Stripe session
+     * Processes a checkout session event by extracting transaction details and storing in database.
+     * <p>
+     * This method:
+     * 1. Extracts the session ID and checks for duplicate processing
+     * 2. Extracts transaction data (email, amount, currency) from the event
+     * 3. Creates and saves a Transaction entity
+     * 4. Retrieves line items from the Stripe API or creates fallback items
+     * 5. Creates and saves TransactionItem entities linked to the Transaction
+     * 
+     * @param event Event - The Stripe event object containing checkout session data
+     * @return boolean - true if processing succeeded, false otherwise
      */
     private boolean processCheckoutSession(Event event) {
         log.info("Attempting to process checkout session for event: {}", event.getId());
@@ -215,12 +267,12 @@ public class StripeWebhookController {
             String sessionId = getSessionIdFromEvent(event);
             log.info("Using session ID: {}", sessionId);
                     
-                    // Check if this session has already been processed
-                    Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
-                    if (existingTransaction.isPresent()) {
+            // Check if this session has already been processed
+            Optional<Transaction> existingTransaction = transactionRepository.findByStripeSessionId(sessionId);
+            if (existingTransaction.isPresent()) {
                 log.info("Session already processed: {}", sessionId);
-                        return true;
-                    }
+                return true;
+            }
             
             // Extract customer email and amount from the raw JSON if possible
             String customerEmail = "webhook@example.com";
@@ -291,26 +343,26 @@ public class StripeWebhookController {
                 log.warn("Failed to extract data from event JSON: {}", e.getMessage());
             }
                     
-                    // Create a new transaction record
-                    Transaction transaction = new Transaction();
-                    transaction.setStripeSessionId(sessionId);
+            // Create a new transaction record
+            Transaction transaction = new Transaction();
+            transaction.setStripeSessionId(sessionId);
             transaction.setStripePaymentIntentId(paymentIntentId);
             transaction.setCustomerEmail(customerEmail);
             transaction.setTotalAmount(amount);
             transaction.setCurrency(currency);
-                    transaction.setPaymentStatus("COMPLETED");
-                    transaction.setTransactionDate(LocalDateTime.now());
+            transaction.setPaymentStatus("COMPLETED");
+            transaction.setTransactionDate(LocalDateTime.now());
             
             log.info("Created transaction with session ID: {}, amount: {}", sessionId, amount);
                     
-                    // Save transaction first to get an ID
-                    transaction = transactionRepository.save(transaction);
+            // Save transaction first to get an ID
+            transaction = transactionRepository.save(transaction);
                     
             // Now try to retrieve line items
             // Two approaches:
             // 1. Try to parse from raw JSON if available
             // 2. If that fails, try to retrieve from Stripe API
-                    List<TransactionItem> transactionItems = new ArrayList<>();
+            List<TransactionItem> transactionItems = new ArrayList<>();
             boolean itemsCreated = false;
             
             try {
@@ -335,7 +387,7 @@ public class StripeWebhookController {
                         }
                         
                         itemsCreated = true;
-                                } catch (Exception e) {
+                    } catch (Exception e) {
                         log.error("Failed to retrieve session or line items from Stripe: {}", e.getMessage(), e);
                     }
                 }
@@ -349,34 +401,45 @@ public class StripeWebhookController {
                     item.setQuantity(1L);
                     item.setPrice(amount);
                     item.setTotalPrice(amount);
-                            item.setTransaction(transaction);
-                            transactionItems.add(item);
-                        }
-                    } catch (Exception e) {
+                    item.setTransaction(transaction);
+                    transactionItems.add(item);
+                }
+            } catch (Exception e) {
                 log.error("Error creating transaction items: {}", e.getMessage(), e);
                 // Create generic item
-                        TransactionItem item = new TransactionItem();
-                        item.setProductName("Order #" + sessionId.substring(sessionId.length() - 6));
-                        item.setProductId(sessionId);
-                        item.setQuantity(1L);
+                TransactionItem item = new TransactionItem();
+                item.setProductName("Order #" + sessionId.substring(sessionId.length() - 6));
+                item.setProductId(sessionId);
+                item.setQuantity(1L);
                 item.setPrice(amount);
                 item.setTotalPrice(amount);
-                        item.setTransaction(transaction);
-                        transactionItems.add(item);
-                    }
+                item.setTransaction(transaction);
+                transactionItems.add(item);
+            }
                     
-                    // Set items and save again
-                    transaction.setItems(transactionItems);
-                    transactionRepository.save(transaction);
-                    log.info("Transaction saved with {} items", transactionItems.size());
-                    return true;
+            // Set items and save again
+            transaction.setItems(transactionItems);
+            transactionRepository.save(transaction);
+            log.info("Transaction saved with {} items", transactionItems.size());
+            return true;
         } catch (Exception e) {
             log.error("Error processing checkout session: {}", e.getMessage(), e);
             return false;
         }
     }
     
-    // Helper method to create a transaction item from a line item
+    /**
+     * Creates a TransactionItem entity from a Stripe LineItem.
+     * <p>
+     * This method:
+     * 1. Extracts product ID from the line item description (format: "Product Name [ID:123]")
+     * 2. Cleans up the product name by removing the ID part
+     * 3. Sets quantity, price, and total price based on the Stripe line item data
+     * 
+     * @param lineItem LineItem - The Stripe line item object containing product data
+     * @param transaction Transaction - The parent Transaction entity to link this item to
+     * @return TransactionItem - The created TransactionItem entity
+     */
     private TransactionItem createTransactionItemFromLineItem(LineItem lineItem, Transaction transaction) {
         TransactionItem item = new TransactionItem();
         
@@ -447,7 +510,13 @@ public class StripeWebhookController {
     }
     
     /**
-     * CUSTOM APP LOGIC: Create a generic transaction when proper session data can't be retrieved
+     * Creates a generic transaction when proper session data can't be retrieved.
+     * <p>
+     * This is a fallback method that creates a minimal transaction record when
+     * normal processing fails. It's used to ensure we at least have some record
+     * of the payment event, even if details are limited.
+     * 
+     * @param event Event - The Stripe event object containing limited payment data
      */
     private void createGenericTransaction(Event event) {
         log.info("Creating generic transaction for event type: {}, event ID: {}", event.getType(), event.getId());
@@ -516,7 +585,12 @@ public class StripeWebhookController {
     }
     
     /**
-     * CUSTOM APP LOGIC: Handle payment_intent.succeeded events
+     * Handles 'payment_intent.succeeded' events from Stripe.
+     * <p>
+     * This method updates the payment status of an existing transaction
+     * if one is found with the matching payment intent ID.
+     * 
+     * @param event Event - The Stripe event object containing payment intent data
      */
     private void handlePaymentIntentSucceeded(Event event) {
         try {
@@ -537,7 +611,13 @@ public class StripeWebhookController {
     }
     
     /**
-     * STRIPE BOILERPLATE: Extract a payment intent ID from the event
+     * Extracts a payment intent ID from a Stripe event.
+     * <p>
+     * This method attempts to retrieve the payment intent ID from the event data
+     * by deserializing the Stripe object.
+     * 
+     * @param event Event - The Stripe event object that might contain a PaymentIntent
+     * @return String - The payment intent ID if found, null otherwise
      */
     private String extractPaymentIntentId(Event event) {
         try {
