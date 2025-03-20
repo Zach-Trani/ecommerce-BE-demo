@@ -1,11 +1,10 @@
-# Modular Backend Structure Example:
+### Link to Hosted Site
+https://lively-moss-09bc30c10.4.azurestaticapps.net/ <br>
 
-To Deploy: 
-* run build-and-push.sh
-* restart backend azure app service
+### Link to Front End Repo
+https://github.com/Zach-Trani/ecommerce-FE-demo <br>
 
-### Application (main method) <br>
-### modules <br>
+### Back End Modular Architecture <br>
 * Modules/stripe
   * controller
   * dto
