@@ -5,21 +5,19 @@ https://lively-moss-09bc30c10.4.azurestaticapps.net/ <br>
 https://github.com/Zach-Trani/ecommerce-FE-demo <br>
 
 ### Back End Modular Architecture <br>
-* Modules/stripe
+* modules/product - database product entries
   * controller
-  * dto
   * entity
   * repository
-  * service
-* modules/cloudinary
+* modules/stripe - stripe checkout integration for a cart of products
   * controller
   * dto
-  * entity
-  * repository
   * service
-* modules/checkout
+* modules/transactions - stripe webhook integration for recording transactions in the database
   * controller
-  * dto
   * entity
   * repository
-  * service
+* modules/customer - customer contact and shipping records in the database
+  * controller
+  * entity
+  * repository
